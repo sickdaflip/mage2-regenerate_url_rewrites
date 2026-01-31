@@ -195,24 +195,16 @@ class RegenerateProductRewrites extends AbstractRegenerateRewrites
         // if "request_path" is not null or equal to "false" then Magento do not search and do not use Url Rewrites
         $updateAttributes = ['url_path' => null];
         if (!$this->regenerateOptions['noRegenUrlKey']) {
-            $existingUrlKey = $entity->getUrlKey();
+            // Transliterate German characters in the product name before generating URL key
+            $originalName = $entity->getName();
+            $transliteratedName = $this->helper->transliterateGermanCharacters($originalName);
+            $entity->setName($transliteratedName);
 
-            if (!empty($existingUrlKey)) {
-                // Use existing url_key but transliterate German characters
-                $generatedKey = $this->helper->transliterateGermanCharacters($existingUrlKey);
-            } else {
-                // Generate from product name with German character transliteration
-                $originalName = $entity->getName();
-                $transliteratedName = $this->helper->transliterateGermanCharacters($originalName);
-                $entity->setName($transliteratedName);
-
-                $generatedKey = $this->_getProductUrlPathGenerator()->getUrlKey($entity->setUrlKey(null));
-
-                // Restore original name
-                $entity->setName($originalName);
-            }
-
+            $generatedKey = $this->_getProductUrlPathGenerator()->getUrlKey($entity->setUrlKey(null));
             $updateAttributes['url_key'] = $generatedKey;
+
+            // Restore original name
+            $entity->setName($originalName);
         }
 
         try {

@@ -228,26 +228,17 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
         }
 
         if (!$this->regenerateOptions['noRegenUrlKey']) {
-            $existingUrlKey = $category->getUrlKey();
-
-            if (!empty($existingUrlKey)) {
-                // Use existing url_key but transliterate German characters
-                $generatedKey = $this->helper->transliterateGermanCharacters($existingUrlKey);
-            } else {
-                // Generate from category name with German character transliteration
-                $originalName = $category->getName();
-                $transliteratedName = $this->helper->transliterateGermanCharacters($originalName);
-                $category->setName($transliteratedName);
-
-                $generatedKey = $this->_getCategoryUrlPathGenerator()->getUrlKey($category->setUrlKey(null));
-
-                // Restore original name
-                $category->setName($originalName);
-            }
+            // Transliterate German characters in the category name before generating URL key
+            $originalName = $category->getName();
+            $transliteratedName = $this->helper->transliterateGermanCharacters($originalName);
+            $category->setName($transliteratedName);
 
             $category->setOrigData('url_key', null);
-            $category->setUrlKey($generatedKey);
+            $category->setUrlKey($this->_getCategoryUrlPathGenerator()->getUrlKey($category->setUrlKey(null)));
             $category->getResource()->saveAttribute($category, 'url_key');
+
+            // Restore original name
+            $category->setName($originalName);
         }
 
         try {
