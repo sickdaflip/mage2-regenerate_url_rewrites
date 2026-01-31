@@ -241,14 +241,21 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
             $category->setName($originalName);
         }
 
+        // Transliterate German characters in the category name before generating URL path
+        $originalName = $category->getName();
+        $transliteratedName = $this->helper->transliterateGermanCharacters($originalName);
+        $category->setName($transliteratedName);
+
         try {
             $urlPath = $this->_getCategoryUrlPathGenerator()->getUrlPath($category);
         } catch (LocalizedException $e) {
             $urlPath = null;
         }
+
+        // Restore original name
+        $category->setName($originalName);
+
         if (!empty($urlPath)) {
-            // Transliterate German characters in the url_path
-            $urlPath = $this->helper->transliterateGermanCharacters($urlPath);
             $category->unsUrlPath();
             $category->setUrlPath($urlPath);
             $category->getResource()->saveAttribute($category, 'url_path');
