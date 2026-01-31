@@ -235,6 +235,8 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
             $category->setData('save_rewrites_history', true);
         }
 
+        // Get or generate url_key
+        $generatedUrlKey = null;
         if (!$this->regenerateOptions['noRegenUrlKey']) {
             // Transliterate German characters in the category name before generating URL key
             $originalName = $category->getName();
@@ -242,19 +244,22 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
             $category->setName($transliteratedName);
 
             $category->setOrigData('url_key', null);
-            $category->setUrlKey($this->_getCategoryUrlPathGenerator()->getUrlKey($category->setUrlKey(null)));
+            $category->setUrlKey(null);
+            $generatedUrlKey = $this->_getCategoryUrlPathGenerator()->getUrlKey($category);
+            $category->setUrlKey($generatedUrlKey);
             $category->getResource()->saveAttribute($category, 'url_key');
 
             // Restore original name
             $category->setName($originalName);
+        } else {
+            $generatedUrlKey = $category->getUrlKey();
         }
 
         // Build url_path manually from parent url_path + own url_key
         // This ensures proper umlaut transliteration throughout the path
         // Use cache to get freshly generated parent url_paths (not stale DB data)
         $urlPath = null;
-        $urlKey = $category->getUrlKey();
-        if (!empty($urlKey)) {
+        if (!empty($generatedUrlKey)) {
             $parentId = $category->getParentId();
             // Check cache first, then fall back to parent category object
             if (isset($this->urlPathCache[$parentId])) {
@@ -267,9 +272,9 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
             }
 
             if (!empty($parentUrlPath)) {
-                $urlPath = $parentUrlPath . '/' . $urlKey;
+                $urlPath = $parentUrlPath . '/' . $generatedUrlKey;
             } else {
-                $urlPath = $urlKey;
+                $urlPath = $generatedUrlKey;
             }
         }
 
