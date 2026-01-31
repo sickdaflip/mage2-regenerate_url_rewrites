@@ -235,22 +235,20 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
             $category->setData('save_rewrites_history', true);
         }
 
+        // Transliterate German characters in the category name BEFORE any URL generation
+        // Keep it transliterated until after generate() is called
+        $originalName = $category->getName();
+        $transliteratedName = $this->helper->transliterateGermanCharacters($originalName);
+        $category->setName($transliteratedName);
+
         // Get or generate url_key
         $generatedUrlKey = null;
         if (!$this->regenerateOptions['noRegenUrlKey']) {
-            // Transliterate German characters in the category name before generating URL key
-            $originalName = $category->getName();
-            $transliteratedName = $this->helper->transliterateGermanCharacters($originalName);
-            $category->setName($transliteratedName);
-
             $category->setOrigData('url_key', null);
             $category->setUrlKey(null);
             $generatedUrlKey = $this->_getCategoryUrlPathGenerator()->getUrlKey($category);
             $category->setUrlKey($generatedUrlKey);
             $category->getResource()->saveAttribute($category, 'url_key');
-
-            // Restore original name
-            $category->setName($originalName);
         } else {
             $generatedUrlKey = $category->getUrlKey();
         }
@@ -296,6 +294,9 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
         if (!empty($categoryUrlRewriteResult)) {
             $this->saveUrlRewrites($categoryUrlRewriteResult);
         }
+
+        // Restore original name after all URL generation is done
+        $category->setName($originalName);
 
         // if config option "Use Category Path for Product URLs" is "Yes" then regenerate product urls
         if ($this->helper->useCategoriesPathForProductUrls($storeId)) {
