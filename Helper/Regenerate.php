@@ -130,4 +130,20 @@ class Regenerate extends AbstractHelper
     {
         return str_replace(['//', './'], ['/', '/'], ltrim(ltrim($requestPath, '/'), '.'));
     }
+
+    /**
+     * Transliterate German characters (umlauts) to their ASCII equivalents
+     *
+     * @param string $string
+     * @return string
+     */
+    public function transliterateGermanCharacters(string $string): string
+    {
+        $germanCharMap = [
+            'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'ß' => 'ss',
+            'Ä' => 'Ae', 'Ö' => 'Oe', 'Ü' => 'Ue',
+        ];
+
+        return str_replace(array_keys($germanCharMap), array_values($germanCharMap), $string);
+    }
 }

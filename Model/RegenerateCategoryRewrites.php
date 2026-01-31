@@ -228,9 +228,17 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
         }
 
         if (!$this->regenerateOptions['noRegenUrlKey']) {
+            // Transliterate German characters in the category name before generating URL key
+            $originalName = $category->getName();
+            $transliteratedName = $this->helper->transliterateGermanCharacters($originalName);
+            $category->setName($transliteratedName);
+
             $category->setOrigData('url_key', null);
             $category->setUrlKey($this->_getCategoryUrlPathGenerator()->getUrlKey($category->setUrlKey(null)));
             $category->getResource()->saveAttribute($category, 'url_key');
+
+            // Restore original name
+            $category->setName($originalName);
         }
 
         try {
