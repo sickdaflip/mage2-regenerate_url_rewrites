@@ -141,7 +141,7 @@ class Regenerate extends AbstractHelper
     {
         $germanCharMap = [
             'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'ß' => 'ss',
-            'Ä' => 'Ae', 'Ö' => 'Oe', 'Ü' => 'Ue',
+            'Ä' => 'ae', 'Ö' => 'oe', 'Ü' => 'ue',
         ];
 
         return str_replace(array_keys($germanCharMap), array_values($germanCharMap), $string);
