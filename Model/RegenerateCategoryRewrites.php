@@ -43,6 +43,11 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
     protected $dataUrlRewriteClassNames = [];
 
     /**
+     * @var array Cache for generated url_paths by category ID
+     */
+    protected $urlPathCache = [];
+
+    /**
      * @var DatabaseMapPool
      */
     protected $databaseMapPool;
@@ -131,6 +136,9 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
      */
     public function regenerate(int $storeId = 0): static
     {
+        // Clear url_path cache at start of regeneration
+        $this->urlPathCache = [];
+
         if (count($this->regenerateOptions['categoriesFilter']) > 0) {
             $this->regenerateCategoriesRangeUrlRewrites(
                 $this->regenerateOptions['categoriesFilter'],
@@ -243,23 +251,31 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
 
         // Build url_path manually from parent url_path + own url_key
         // This ensures proper umlaut transliteration throughout the path
+        // Use cache to get freshly generated parent url_paths (not stale DB data)
         $urlPath = null;
         $urlKey = $category->getUrlKey();
         if (!empty($urlKey)) {
-            $parentCategory = $category->getParentCategory();
-            if ($parentCategory && $parentCategory->getLevel() > 1) {
-                $parentUrlPath = $parentCategory->getUrlPath();
-                if (!empty($parentUrlPath)) {
-                    $urlPath = $parentUrlPath . '/' . $urlKey;
-                } else {
-                    $urlPath = $urlKey;
-                }
+            $parentId = $category->getParentId();
+            // Check cache first, then fall back to parent category object
+            if (isset($this->urlPathCache[$parentId])) {
+                $parentUrlPath = $this->urlPathCache[$parentId];
+            } else {
+                $parentCategory = $category->getParentCategory();
+                $parentUrlPath = ($parentCategory && $parentCategory->getLevel() > 1)
+                    ? $parentCategory->getUrlPath()
+                    : null;
+            }
+
+            if (!empty($parentUrlPath)) {
+                $urlPath = $parentUrlPath . '/' . $urlKey;
             } else {
                 $urlPath = $urlKey;
             }
         }
 
         if (!empty($urlPath)) {
+            // Store in cache for child categories to use
+            $this->urlPathCache[$category->getId()] = $urlPath;
             $category->unsUrlPath();
             $category->setUrlPath($urlPath);
             $category->getResource()->saveAttribute($category, 'url_path');
