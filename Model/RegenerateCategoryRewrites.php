@@ -247,6 +247,8 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
             $urlPath = null;
         }
         if (!empty($urlPath)) {
+            // Transliterate German characters in the url_path
+            $urlPath = $this->helper->transliterateGermanCharacters($urlPath);
             $category->unsUrlPath();
             $category->setUrlPath($urlPath);
             $category->getResource()->saveAttribute($category, 'url_path');
