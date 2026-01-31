@@ -291,6 +291,22 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
         } catch (\Exception $e) {
             $categoryUrlRewriteResult = null;
         }
+
+        // Fix the request_path in generated rewrites with our correctly transliterated url_path
+        // Magento's generate() uses parent category names which may have wrong transliteration
+        if (!empty($categoryUrlRewriteResult) && !empty($urlPath)) {
+            foreach ($categoryUrlRewriteResult as $urlRewrite) {
+                $oldRequestPath = $urlRewrite->getRequestPath();
+                // Extract suffix (e.g., .html) from the original request path
+                $suffix = '';
+                if (preg_match('/(\.[a-z]+)$/i', $oldRequestPath, $matches)) {
+                    $suffix = $matches[1];
+                }
+                // Replace with our correctly transliterated url_path + suffix
+                $urlRewrite->setRequestPath($urlPath . $suffix);
+            }
+        }
+
         if (!empty($categoryUrlRewriteResult)) {
             $this->saveUrlRewrites($categoryUrlRewriteResult);
         }
