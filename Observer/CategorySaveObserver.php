@@ -72,9 +72,7 @@ class CategorySaveObserver implements ObserverInterface
     private function formatUrlKey(string $value): string
     {
         $value = strtolower(trim($value));
-        $value = str_replace('.', '', $value);           // dots removed without replacement
-        $value = preg_replace('/\s+/', '-', trim($value));
-        $value = preg_replace('/[^a-z0-9-]+/', '', $value);
+        $value = preg_replace('/[^a-z0-9]+/', '-', $value);
         return trim($value, '-');
     }
 }
