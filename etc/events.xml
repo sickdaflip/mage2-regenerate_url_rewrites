@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Regenerate Url Rewrites
+ *
+ * @package OlegKoval_RegenerateUrlRewrites
+ * @author Oleg Koval <olegkoval.ca@gmail.com>
+ * @copyright 2017-2067 Oleg Koval
+ * @license OSL-3.0, AFL-3.0
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="catalog_category_prepare_save">
+        <observer name="olegkoval_regenerate_url_rewrites_category_umlaut"
+                  instance="OlegKoval\RegenerateUrlRewrites\Observer\CategorySaveObserver"/>
+    </event>
+    <event name="catalog_product_prepare_save">
+        <observer name="olegkoval_regenerate_url_rewrites_product_umlaut"
+                  instance="OlegKoval\RegenerateUrlRewrites\Observer\ProductSaveObserver"/>
+    </event>
+</config>
