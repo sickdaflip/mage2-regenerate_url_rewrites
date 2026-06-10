@@ -43,38 +43,6 @@ class Regenerate extends AbstractHelper
     }
 
     /**
-     * Return array with "support me" text
-     *
-     * @return array
-     */
-    public function getSupportMeText(): array
-    {
-        return [
-            'Please, support me on:',
-            'PayPal: olegkoval.ca@gmail.com',
-            'https://www.paypal.com/donate/?hosted_button_id=995MLRKBNY9QQ',
-            'https://www.patreon.com/olegkoval',
-            'https://ko-fi.com/olegkoval77',
-        ];
-    }
-
-    /**
-     * @return string
-     */
-    public function getPurchaseProVersionMsg(): string
-    {
-        return __('To use this option you should purchase a Pro version.')->render();
-    }
-
-    /**
-     * @return bool
-     */
-    public function isRegisteredProVersion(): bool
-    {
-        return true;
-    }
-
-    /**
      * Get store manager
      *
      * @return StoreManagerInterface

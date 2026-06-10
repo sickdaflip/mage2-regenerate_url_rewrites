@@ -195,23 +195,22 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
             $categories = $this->_getCategoriesCollection($categoriesFilter, $storeId);
 
             $pageCount = $categories->getLastPageNumber();
-            $this->progressBarProgress = 0;
-            $this->progressBarTotal = (int)$categories->getSize();
+            $this->_startProgressBar((int)$categories->getSize());
             $currentPage = 1;
 
-            $this->_showProgress();
             while ($currentPage <= $pageCount) {
                 $categories->clear();
                 $categories->setCurPage($currentPage);
 
                 foreach ($categories as $category) {
                     $this->categoryProcess($category, $storeId);
-                    $this->_showProgress();
+                    $this->_advanceProgressBar((string)$category->getName());
                 }
 
                 $currentPage++;
             }
 
+            $this->_finishProgressBar();
             $this->_updateSecondaryTable();
         } catch (LocalizedException $e) {
             // skip it
@@ -330,7 +329,12 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
 
         // if config option "Use Category Path for Product URLs" is "Yes" then regenerate product urls
         if ($this->helper->useCategoriesPathForProductUrls($storeId)) {
-            $productsIds = $this->_getCategoriesProductsIds($category->getAllChildren());
+            // Only the products directly assigned to THIS category are regenerated here.
+            // Every descendant category is processed in its own pass and handles its own
+            // products, so using getAllChildren() would regenerate the same products many
+            // times over (once per ancestor level) without changing the outcome - on deep
+            // trees that is the difference between minutes and hours.
+            $productsIds = $this->_getCategoriesProductsIds((string)$category->getId());
             if (!empty($productsIds)) {
                 $this->regenerateProductRewrites->regenerateOptions = $this->regenerateOptions;
                 $this->regenerateProductRewrites->regenerateOptions['showProgress'] = false;
@@ -340,8 +344,6 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
 
         //frees memory for maps that are self-initialized in multiple classes that were called by the generators
         $this->_resetUrlRewritesDataMaps($category);
-
-        $this->progressBarProgress++;
 
         return $this;
     }
