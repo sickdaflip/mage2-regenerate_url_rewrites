@@ -362,7 +362,7 @@ abstract class AbstractRegenerateRewrites
      * @param array $rewrite
      * @return string
      */
-    protected function _urlRewriteExists(array $rewrite): string
+    protected function _urlRewriteExists(array $rewrite): string|false
     {
         $select = $this->_getResourceConnection()->getConnection()->select()
             ->from($this->_getMainTableName(), ['url_rewrite_id'])

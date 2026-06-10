@@ -65,7 +65,7 @@ class RegenerateProductRewrites extends AbstractRegenerateRewrites
     protected $productUrlPathGenerator;
 
     /**
-     * @var ProductCollectionFactoryy
+     * @var ProductCollectionFactory
      */
     protected $productCollectionFactory;
 

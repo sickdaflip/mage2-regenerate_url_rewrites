@@ -40,13 +40,13 @@ class RegenerateUrlRewrites extends RegenerateUrlRewritesAbstract
                 new InputOption(
                     self::INPUT_KEY_STORE_ID,
                     null,
-                    InputArgument::OPTIONAL,
+                    InputOption::VALUE_OPTIONAL,
                     'Specific store id'
                 ),
                 new InputOption(
                     self::INPUT_KEY_REGENERATE_ENTITY_TYPE,
                     null,
-                    InputArgument::OPTIONAL,
+                    InputOption::VALUE_OPTIONAL,
                     'Entity type which URLs regenerate: product or category. Default is "product".'
                 ),
                 new InputOption(
@@ -82,25 +82,25 @@ class RegenerateUrlRewrites extends RegenerateUrlRewritesAbstract
                 new InputOption(
                     self::INPUT_KEY_CATEGORIES_RANGE,
                     null,
-                    InputArgument::OPTIONAL,
+                    InputOption::VALUE_OPTIONAL,
                     'Categories ID range, e.g.: 15-40'
                 ),
                 new InputOption(
                     self::INPUT_KEY_PRODUCTS_RANGE,
                     null,
-                    InputArgument::OPTIONAL,
+                    InputOption::VALUE_OPTIONAL,
                     'Products ID range, e.g.: 101-152'
                 ),
                 new InputOption(
                     self::INPUT_KEY_CATEGORY_ID,
                     null,
-                    InputArgument::OPTIONAL,
+                    InputOption::VALUE_OPTIONAL,
                     'Specific category ID, e.g.: 123'
                 ),
                 new InputOption(
                     self::INPUT_KEY_PRODUCT_ID,
                     null,
-                    InputArgument::OPTIONAL,
+                    InputOption::VALUE_OPTIONAL,
                     'Specific product ID, e.g.: 107'
                 ),
                 new InputOption(
@@ -137,7 +137,7 @@ class RegenerateUrlRewrites extends RegenerateUrlRewritesAbstract
 
         // set area code if needed
         try {
-            $areaCode = $this->_appState->getAreaCode();
+            $this->_appState->getAreaCode();
         } catch (LocalizedException $e) {
             // if area code is not set then magento generate exception "LocalizedException"
             try {
