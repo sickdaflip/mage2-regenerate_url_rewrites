@@ -286,6 +286,9 @@ class RegenerateProductRewrites extends AbstractRegenerateRewrites
             ->addAttributeToSelect('url_key')
             ->addAttributeToSelect('url_path')
             ->addAttributeToFilter('visibility', ['neq' => Visibility::VISIBILITY_NOT_VISIBLE])
+            // deterministic order is required for stable pagination: attributes are updated
+            // between pages and without an ORDER BY products can get skipped or processed twice
+            ->setOrder('entity_id', 'ASC')
             // use limit to avoid an "eating" of a memory
             ->setPageSize($this->productsCollectionPageSize);
 

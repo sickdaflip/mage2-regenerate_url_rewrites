@@ -120,20 +120,29 @@ abstract class AbstractRegenerateRewrites
     {
         $data = $this->_prepareUrlRewrites($urlRewrites);
 
-        if (!$this->regenerateOptions['saveOldUrls']) {
-            if (empty($entityData) && !empty($data)) {
-                $entityData = $data;
-            }
-            $this->_deleteCurrentRewrites($entityData);
+        if (empty($data) && empty($entityData)) {
+            return $this;
         }
 
+        // delete + insert must run in ONE transaction: if the insert fails, the old rewrites
+        // are restored by the rollback instead of leaving entities without any rewrite
+        // (which makes the frontend fall back to the raw system URLs)
         $this->_getResourceConnection()->getConnection()->beginTransaction();
         try {
-            $this->_getResourceConnection()->getConnection()->insertOnDuplicate(
-                $this->_getMainTableName(),
-                $data,
-                ['request_path', 'metadata']
-            );
+            if (!$this->regenerateOptions['saveOldUrls']) {
+                if (empty($entityData) && !empty($data)) {
+                    $entityData = $data;
+                }
+                $this->_deleteCurrentRewrites($entityData);
+            }
+
+            if (!empty($data)) {
+                $this->_getResourceConnection()->getConnection()->insertOnDuplicate(
+                    $this->_getMainTableName(),
+                    $data,
+                    ['request_path', 'metadata']
+                );
+            }
             $this->_getResourceConnection()->getConnection()->commit();
 
         } catch (\Exception $e) {
@@ -238,17 +247,11 @@ abstract class AbstractRegenerateRewrites
             }
             $whereConditions = array_unique($whereConditions);
 
-            $this->_getResourceConnection()->getConnection()->beginTransaction();
-            try {
-                $this->_getResourceConnection()->getConnection()->delete(
-                    $this->_getMainTableName(),
-                    implode(' OR ', $whereConditions)
-                );
-                $this->_getResourceConnection()->getConnection()->commit();
-
-            } catch (\Exception $e) {
-                $this->_getResourceConnection()->getConnection()->rollBack();
-            }
+            // runs inside the transaction opened by saveUrlRewrites()
+            $this->_getResourceConnection()->getConnection()->delete(
+                $this->_getMainTableName(),
+                implode(' OR ', $whereConditions)
+            );
         }
 
         return $this;
@@ -319,6 +322,9 @@ abstract class AbstractRegenerateRewrites
     protected function _prepareUrlRewrites(array $urlRewrites): array
     {
         $result = [];
+        // request paths already used in this batch: "store_id|request_path" => entity info
+        $processedPaths = [];
+
         foreach ($urlRewrites as $urlRewrite) {
             $rewrite = $urlRewrite->toArray();
 
@@ -343,13 +349,34 @@ abstract class AbstractRegenerateRewrites
             $rewrite['request_path'] = $this->_mergePartsIntoRewriteRequest($pathParts, '', $urlSuffix);
 
             // check if we have a duplicate (maybe exists product with the same name => same Url Rewrite)
-            // if exists then add additional index to avoid a duplicates
+            // if exists then add additional index to avoid a duplicates.
+            // The check covers the DB AND the current batch: insertOnDuplicate would silently
+            // merge two batch rows with equal (request_path, store_id) into one row, leaving
+            // one of the entities without any Url Rewrite
             $index = 0;
-            while ($this->_urlRewriteExists($rewrite)) {
+            $skipRow = false;
+            while (true) {
+                $pathKey = $rewrite['store_id'] . '|' . $rewrite['request_path'];
+                if (isset($processedPaths[$pathKey])) {
+                    if ($processedPaths[$pathKey]['entity_type'] === $rewrite['entity_type']
+                        && (int)$processedPaths[$pathKey]['entity_id'] === (int)$rewrite['entity_id']
+                    ) {
+                        // identical request path of the same entity is already in the batch - drop duplicate
+                        $skipRow = true;
+                        break;
+                    }
+                } elseif (!$this->_urlRewriteExists($rewrite)) {
+                    break;
+                }
                 $index++;
                 $rewrite['request_path'] = $this->_mergePartsIntoRewriteRequest($pathParts, (string)$index, $urlSuffix);
             }
+            if ($skipRow) continue;
 
+            $processedPaths[$rewrite['store_id'] . '|' . $rewrite['request_path']] = [
+                'entity_type' => $rewrite['entity_type'],
+                'entity_id' => $rewrite['entity_id'],
+            ];
             $result[] = $rewrite;
         }
 
@@ -360,17 +387,25 @@ abstract class AbstractRegenerateRewrites
      * Check if Url Rewrite with the same request path exists
      *
      * @param array $rewrite
-     * @return string
+     * @return string|false
      */
     protected function _urlRewriteExists(array $rewrite): string|false
     {
-        $select = $this->_getResourceConnection()->getConnection()->select()
+        $connection = $this->_getResourceConnection()->getConnection();
+
+        // the unique key of url_rewrite spans (request_path, store_id) across ALL entity types,
+        // so a collision with a rewrite of another type (e.g. product vs category) must be
+        // detected too - only rows of the same entity are excluded
+        $select = $connection->select()
             ->from($this->_getMainTableName(), ['url_rewrite_id'])
-            ->where('entity_type = ?', $rewrite['entity_type'])
             ->where('request_path = ?', $rewrite['request_path'])
             ->where('store_id = ?', $rewrite['store_id'])
-            ->where('entity_id != ?', $rewrite['entity_id']);
-        return $this->_getResourceConnection()->getConnection()->fetchOne($select);
+            ->where(
+                $connection->quoteInto('NOT (entity_type = ?', $rewrite['entity_type'])
+                . $connection->quoteInto(' AND entity_id = ?)', $rewrite['entity_id'])
+            );
+
+        return $connection->fetchOne($select);
     }
 
     /**

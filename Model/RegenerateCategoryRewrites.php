@@ -298,9 +298,18 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
         // keep their original request_path (the old URL being redirected FROM). Overwriting
         // redirect request_paths with the canonical URL creates self-referential 301 loops which
         // Magento resolves by falling back to the raw system URL (/catalog/category/view/...).
+        // IMPORTANT: generate() also returns the rewrites of ALL descendant categories - only
+        // the rewrite of the currently processed category may receive this url_path. Otherwise
+        // all descendants collapse into one request_path, their old rewrites get deleted and
+        // they are left without any rewrite (frontend falls back to the raw system URL).
         if (!empty($categoryUrlRewriteResult) && !empty($urlPath)) {
             foreach ($categoryUrlRewriteResult as $urlRewrite) {
                 if ($urlRewrite->getRedirectType() != 0) {
+                    continue;
+                }
+                if ($urlRewrite->getEntityType() !== CategoryUrlRewriteGenerator::ENTITY_TYPE
+                    || (int)$urlRewrite->getEntityId() !== (int)$category->getId()
+                ) {
                     continue;
                 }
                 $oldRequestPath = $urlRewrite->getRequestPath();
@@ -353,9 +362,13 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
             ->addAttributeToSelect('url_path')
             ->setStoreId($storeId)
             // Load all categories with level > 1 (excluding root categories)
-            // Sort by level ASC to ensure parents are processed before children
+            // Sort by level ASC to ensure parents are processed before children;
+            // entity_id as tie-breaker makes the order deterministic - without it MySQL may
+            // return equal-level rows in different order per page query (attributes are updated
+            // between pages) and categories get skipped or processed twice
             ->addFieldToFilter('level', ['gt' => '1'])
             ->setOrder('level', 'ASC')
+            ->setOrder('entity_id', 'ASC')
             // use limit to avoid an "eating" of a memory
             ->setPageSize($this->categoriesCollectionPageSize);
 
