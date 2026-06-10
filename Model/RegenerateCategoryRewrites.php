@@ -43,6 +43,11 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
     protected $dataUrlRewriteClassNames = [];
 
     /**
+     * @var array Cache for generated url_paths by category ID
+     */
+    protected $urlPathCache = [];
+
+    /**
      * @var DatabaseMapPool
      */
     protected $databaseMapPool;
@@ -131,6 +136,9 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
      */
     public function regenerate(int $storeId = 0): static
     {
+        // Clear url_path cache at start of regeneration
+        $this->urlPathCache = [];
+
         if (count($this->regenerateOptions['categoriesFilter']) > 0) {
             $this->regenerateCategoriesRangeUrlRewrites(
                 $this->regenerateOptions['categoriesFilter'],
@@ -227,18 +235,50 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
             $category->setData('save_rewrites_history', true);
         }
 
+        // Transliterate German characters in the category name BEFORE any URL generation
+        // Keep it transliterated until after generate() is called
+        $originalName = $category->getName();
+        $transliteratedName = $this->helper->transliterateGermanCharacters($originalName);
+        $category->setName($transliteratedName);
+
+        // Get or generate url_key
+        $generatedUrlKey = null;
         if (!$this->regenerateOptions['noRegenUrlKey']) {
             $category->setOrigData('url_key', null);
-            $category->setUrlKey($this->_getCategoryUrlPathGenerator()->getUrlKey($category->setUrlKey(null)));
+            $category->setUrlKey(null);
+            $generatedUrlKey = $this->_getCategoryUrlPathGenerator()->getUrlKey($category);
+            $category->setUrlKey($generatedUrlKey);
             $category->getResource()->saveAttribute($category, 'url_key');
+        } else {
+            $generatedUrlKey = $category->getUrlKey();
         }
 
-        try {
-            $urlPath = $this->_getCategoryUrlPathGenerator()->getUrlPath($category);
-        } catch (LocalizedException $e) {
-            $urlPath = null;
+        // Build url_path manually from parent url_path + own url_key
+        // This ensures proper umlaut transliteration throughout the path
+        // Use cache to get freshly generated parent url_paths (not stale DB data)
+        $urlPath = null;
+        if (!empty($generatedUrlKey)) {
+            $parentId = $category->getParentId();
+            // Check cache first, then fall back to parent category object
+            if (isset($this->urlPathCache[$parentId])) {
+                $parentUrlPath = $this->urlPathCache[$parentId];
+            } else {
+                $parentCategory = $category->getParentCategory();
+                $parentUrlPath = ($parentCategory && $parentCategory->getLevel() > 1)
+                    ? $parentCategory->getUrlPath()
+                    : null;
+            }
+
+            if (!empty($parentUrlPath)) {
+                $urlPath = $parentUrlPath . '/' . $generatedUrlKey;
+            } else {
+                $urlPath = $generatedUrlKey;
+            }
         }
+
         if (!empty($urlPath)) {
+            // Store in cache for child categories to use
+            $this->urlPathCache[$category->getId()] = $urlPath;
             $category->unsUrlPath();
             $category->setUrlPath($urlPath);
             $category->getResource()->saveAttribute($category, 'url_path');
@@ -251,9 +291,28 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
         } catch (\Exception $e) {
             $categoryUrlRewriteResult = null;
         }
+
+        // Fix the request_path in generated rewrites with our correctly transliterated url_path
+        // Magento's generate() uses parent category names which may have wrong transliteration
+        if (!empty($categoryUrlRewriteResult) && !empty($urlPath)) {
+            foreach ($categoryUrlRewriteResult as $urlRewrite) {
+                $oldRequestPath = $urlRewrite->getRequestPath();
+                // Extract suffix (e.g., .html) from the original request path
+                $suffix = '';
+                if (preg_match('/(\.[a-z]+)$/i', $oldRequestPath, $matches)) {
+                    $suffix = $matches[1];
+                }
+                // Replace with our correctly transliterated url_path + suffix
+                $urlRewrite->setRequestPath($urlPath . $suffix);
+            }
+        }
+
         if (!empty($categoryUrlRewriteResult)) {
             $this->saveUrlRewrites($categoryUrlRewriteResult);
         }
+
+        // Restore original name after all URL generation is done
+        $category->setName($originalName);
 
         // if config option "Use Category Path for Product URLs" is "Yes" then regenerate product urls
         if ($this->helper->useCategoriesPathForProductUrls($storeId)) {
@@ -288,6 +347,8 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
             ->addAttributeToSelect('url_key')
             ->addAttributeToSelect('url_path')
             ->setStoreId($storeId)
+            // Load all categories with level > 1 (excluding root categories)
+            // Sort by level ASC to ensure parents are processed before children
             ->addFieldToFilter('level', ['gt' => '1'])
             ->setOrder('level', 'ASC')
             // use limit to avoid an "eating" of a memory
