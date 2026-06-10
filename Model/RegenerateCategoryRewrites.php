@@ -292,17 +292,22 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
             $categoryUrlRewriteResult = null;
         }
 
-        // Fix the request_path in generated rewrites with our correctly transliterated url_path
-        // Magento's generate() uses parent category names which may have wrong transliteration
+        // Fix the request_path of canonical rewrites with our correctly transliterated url_path.
+        // Magento's generate() may use stale parent url_path from DB with wrong transliteration.
+        // Only canonical rewrites (redirect_type=0) are fixed; redirect rewrites (301/302) must
+        // keep their original request_path (the old URL being redirected FROM). Overwriting
+        // redirect request_paths with the canonical URL creates self-referential 301 loops which
+        // Magento resolves by falling back to the raw system URL (/catalog/category/view/...).
         if (!empty($categoryUrlRewriteResult) && !empty($urlPath)) {
             foreach ($categoryUrlRewriteResult as $urlRewrite) {
+                if ($urlRewrite->getRedirectType() != 0) {
+                    continue;
+                }
                 $oldRequestPath = $urlRewrite->getRequestPath();
-                // Extract suffix (e.g., .html) from the original request path
                 $suffix = '';
                 if (preg_match('/(\.[a-z]+)$/i', $oldRequestPath, $matches)) {
                     $suffix = $matches[1];
                 }
-                // Replace with our correctly transliterated url_path + suffix
                 $urlRewrite->setRequestPath($urlPath . $suffix);
             }
         }
