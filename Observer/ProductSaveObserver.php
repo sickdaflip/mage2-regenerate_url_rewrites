@@ -52,7 +52,8 @@ class ProductSaveObserver implements ObserverInterface
     public function execute(Observer $observer): void
     {
         /** @var \Magento\Catalog\Model\Product $product */
-        $product = $observer->getEvent()->getProduct();
+        // catalog_product_save_before passes the product as both 'product' and 'object'
+        $product = $observer->getEvent()->getProduct() ?? $observer->getEvent()->getObject();
 
         if (!$product) {
             return;
