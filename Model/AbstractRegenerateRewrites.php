@@ -14,6 +14,8 @@ use OlegKoval\RegenerateUrlRewrites\Helper\Regenerate as RegenerateHelper;
 use Magento\Framework\App\ResourceConnection;
 use Magento\UrlRewrite\Model\Storage\DbStorage;
 use Magento\CatalogUrlRewrite\Model\ResourceModel\Category\Product as ProductUrlRewriteResource;
+use Symfony\Component\Console\Helper\ProgressBar;
+use Symfony\Component\Console\Output\OutputInterface;
 
 abstract class AbstractRegenerateRewrites
 {
@@ -28,14 +30,20 @@ abstract class AbstractRegenerateRewrites
     protected $storeRootCategoryId = [];
 
     /**
-     * @var integer
+     * @var OutputInterface|null
      */
-    protected $progressBarProgress = 0;
+    protected ?OutputInterface $output = null;
 
     /**
-     * @var integer
+     * @var ProgressBar|null
      */
-    protected $progressBarTotal = 0;
+    protected ?ProgressBar $progressBar = null;
+
+    /**
+     * Number of entities processed during the last regenerate() run
+     * @var int
+     */
+    protected int $processedCount = 0;
 
     /**
      * @var string
@@ -153,44 +161,114 @@ abstract class AbstractRegenerateRewrites
     }
 
     /**
-     * Show a progress bar in the console
+     * Inject the console output used to render the progress bar
      *
-     * @param int $size
+     * @param OutputInterface|null $output
+     * @return static
      */
-    protected function _showProgress(int $size = 70): void
+    public function setOutput(?OutputInterface $output): static
     {
-        if (!$this->regenerateOptions['showProgress']) {
+        $this->output = $output;
+
+        return $this;
+    }
+
+    /**
+     * Number of entities processed during the last regenerate() run
+     *
+     * @return int
+     */
+    public function getProcessedCount(): int
+    {
+        return $this->processedCount;
+    }
+
+    /**
+     * Initialize a fresh progress bar for a new run
+     *
+     * @param int $total
+     * @return void
+     */
+    protected function _startProgressBar(int $total): void
+    {
+        $this->processedCount = 0;
+        $this->progressBar = null;
+
+        if (!$this->regenerateOptions['showProgress'] || $this->output === null) {
             return;
         }
 
-        // if we go over our bound, just ignore it
-        if ($this->progressBarProgress > $this->progressBarTotal) {
+        ProgressBar::setFormatDefinition(
+            'okregen',
+            "  <fg=white;options=bold>%current%</>/<fg=white>%max%</>  <fg=yellow>%percent:3s%%</>  [%bar%]\n"
+            . "  <fg=gray>elapsed</> <fg=white>%elapsed:6s%</>  <fg=gray>left</> <fg=white>%estimated:-6s%</>"
+            . "  <fg=gray>mem</> <fg=white>%memory:6s%</>  <fg=cyan>%message%</>"
+        );
+
+        $this->progressBar = new ProgressBar($this->output, max(0, $total));
+        $this->progressBar->setFormat('okregen');
+        $this->progressBar->setBarCharacter('<fg=green>━</>');
+        $this->progressBar->setProgressCharacter('<fg=green>╸</>');
+        $this->progressBar->setEmptyBarCharacter('<fg=gray>─</>');
+        $this->progressBar->setBarWidth(40);
+        $this->progressBar->setMessage('');
+        // throttle redraws so huge catalogs don't spend all their time repainting
+        $this->progressBar->minSecondsBetweenRedraws(0.05);
+        $this->progressBar->maxSecondsBetweenRedraws(0.3);
+        $this->progressBar->start();
+    }
+
+    /**
+     * Advance the progress bar by one step
+     *
+     * @param string $message label of the entity just processed
+     * @return void
+     */
+    protected function _advanceProgressBar(string $message = ''): void
+    {
+        $this->processedCount++;
+
+        if ($this->progressBar === null) {
             return;
         }
 
-        $perc = $this->progressBarTotal ? (double)($this->progressBarProgress / $this->progressBarTotal) : 1;
-        $bar = floor($perc * $size);
+        if ($message !== '') {
+            $this->progressBar->setMessage($this->_progressLabel($message));
+        }
+        $this->progressBar->advance();
+    }
 
-        $status_bar = "\r[";
-        $status_bar .= str_repeat('=', $bar);
-        if ($bar < $size) {
-            $status_bar .= '>';
-            $status_bar .= str_repeat(' ', $size - $bar);
-        } else {
-            $status_bar .= '=';
+    /**
+     * Finish and clear the progress bar
+     *
+     * @return void
+     */
+    protected function _finishProgressBar(): void
+    {
+        if ($this->progressBar === null) {
+            return;
         }
 
-        $disp = number_format($perc * 100, 0);
+        $this->progressBar->setMessage('<fg=green>done</>');
+        $this->progressBar->finish();
+        $this->output?->writeln(['', '']);
+        $this->progressBar = null;
+    }
 
-        $status_bar .= "] {$disp}%  {$this->progressBarProgress}/{$this->progressBarTotal}";
-
-        echo $status_bar;
-        flush();
-
-        // when done, send a newline
-        if ($this->progressBarProgress == $this->progressBarTotal) {
-            echo "\r\n";
+    /**
+     * Shorten an entity label so the progress line stays on a single row
+     *
+     * @param string $name
+     * @return string
+     */
+    protected function _progressLabel(string $name): string
+    {
+        $name = trim((string)preg_replace('/\s+/', ' ', $name));
+        if (mb_strlen($name) > 40) {
+            $name = mb_substr($name, 0, 39) . '…';
         }
+
+        return $name;
     }
 
     /**

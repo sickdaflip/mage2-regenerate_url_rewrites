@@ -156,8 +156,7 @@ class RegenerateProductRewrites extends AbstractRegenerateRewrites
     {
         $products = $this->_getProductsCollection($productsFilter, $storeId);
         $pageCount = $products->getLastPageNumber();
-        $this->progressBarProgress = 1;
-        $this->progressBarTotal = (int)$products->getSize();
+        $this->_startProgressBar((int)$products->getSize());
         $currentPage = 1;
 
         while ($currentPage <= $pageCount) {
@@ -165,13 +164,14 @@ class RegenerateProductRewrites extends AbstractRegenerateRewrites
             $products->setCurPage($currentPage);
 
             foreach ($products as $product) {
-                $this->_showProgress();
                 $this->processProduct($product, $storeId);
+                $this->_advanceProgressBar((string)$product->getName());
             }
 
             $currentPage++;
         }
 
+        $this->_finishProgressBar();
         $this->_updateSecondaryTable();
 
         return $this;
@@ -226,8 +226,6 @@ class RegenerateProductRewrites extends AbstractRegenerateRewrites
         } catch (\Exception $e) {
             // go to the next product
         }
-
-        $this->progressBarProgress++;
 
         return $this;
     }

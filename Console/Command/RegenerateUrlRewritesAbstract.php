@@ -12,6 +12,7 @@ namespace OlegKoval\RegenerateUrlRewrites\Console\Command;
 
 use Magento\Framework\Phrase;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Style\SymfonyStyle;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\App\State as AppState;
 use Magento\Store\Model\StoreManagerInterface;
@@ -77,9 +78,9 @@ abstract class RegenerateUrlRewritesAbstract extends Command
     protected $_errors = [];
 
     /**
-     * @var array
+     * @var SymfonyStyle|null
      */
-    protected $_consoleMsg = [];
+    protected ?SymfonyStyle $io = null;
 
     /**
      * RegenerateUrlRewritesAbstract constructor
@@ -122,24 +123,6 @@ abstract class RegenerateUrlRewritesAbstract extends Command
         $this->_commandOptions['categoryId'] = null;
         $this->_commandOptions['productId'] = null;
         $this->_commandOptions['noRegenUrlKey'] = false;
-    }
-
-    /**
-     * Display a support/donate information
-     *
-     * @return void
-     */
-    protected function _showSupportMe(): void
-    {
-        $text = $this->helper->getSupportMeText();
-
-        $this->_output->writeln('');
-        $this->_output->writeln('----------------------------------------------------');
-        foreach ($text as $line) {
-            $this->_output->writeln($line);
-        }
-        $this->_output->writeln('----------------------------------------------------');
-        $this->_output->writeln('');
     }
 
     /**
@@ -203,6 +186,8 @@ abstract class RegenerateUrlRewritesAbstract extends Command
     }
 
     /**
+     * Collect an error message
+     *
      * @param Phrase|string $error
      * @return void
      */
@@ -212,49 +197,19 @@ abstract class RegenerateUrlRewritesAbstract extends Command
     }
 
     /**
-     * Collect console messages
-     *
-     * @param Phrase|string $msg
-     * @return void
-     */
-    protected function _addConsoleMsg(Phrase|string $msg): void
-    {
-        if ($msg instanceof Phrase) {
-            $msg = $msg->render();
-        }
-
-        $this->_consoleMsg[] = (string)$msg;
-    }
-
-    /**
-     * Display all console messages
-     *
-     * @return void
-     */
-    protected function _displayConsoleMsg(): void
-    {
-        if (count($this->_consoleMsg) > 0) {
-            $this->_output->writeln('[CONSOLE MESSAGES]');
-            foreach ($this->_consoleMsg as $msg) {
-                $this->_output->writeln($msg);
-            }
-            $this->_output->writeln('[END OF CONSOLE MESSAGES]');
-            $this->_output->writeln('');
-            $this->_output->writeln('');
-        }
-    }
-
-    /**
      * Run re-indexation
+     *
      * @return void
      */
     protected function _runReindexation(): void
     {
-        if ($this->_commandOptions['runReindex']) {
-            $this->_output->write('Reindexation...');
-            shell_exec('php bin/magento indexer:reindex');
-            $this->_output->writeln(' Done');
+        if (!$this->_commandOptions['runReindex']) {
+            return;
         }
+
+        $this->io->write('  Reindexing URL rewrites … ');
+        shell_exec('php bin/magento indexer:reindex');
+        $this->io->writeln('<info>done</info>');
     }
 
     /**
@@ -264,16 +219,18 @@ abstract class RegenerateUrlRewritesAbstract extends Command
      */
     protected function _runClearCache(): void
     {
-        if ($this->_commandOptions['runCacheClean'] || $this->_commandOptions['runCacheFlush']) {
-            $this->_output->write('Cache refreshing...');
-            if ($this->_commandOptions['runCacheClean']) {
-                shell_exec('php bin/magento cache:clean');
-            }
-            if ($this->_commandOptions['runCacheFlush']) {
-                shell_exec('php bin/magento cache:flush');
-            }
-            $this->_output->writeln(' Done');
-            $this->_output->writeln('If you use some external cache mechanisms (e.g.: Redis, Varnish, etc.) - please, refresh this external cache.');
+        if (!$this->_commandOptions['runCacheClean'] && !$this->_commandOptions['runCacheFlush']) {
+            return;
         }
+
+        $this->io->write('  Refreshing cache … ');
+        if ($this->_commandOptions['runCacheClean']) {
+            shell_exec('php bin/magento cache:clean');
+        }
+        if ($this->_commandOptions['runCacheFlush']) {
+            shell_exec('php bin/magento cache:flush');
+        }
+        $this->io->writeln('<info>done</info>');
+        $this->io->writeln('  <comment>If you use an external cache (Redis, Varnish, …), refresh it too.</comment>');
     }
 }
