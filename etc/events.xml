@@ -14,7 +14,7 @@
         <observer name="olegkoval_regenerate_url_rewrites_category_umlaut"
                   instance="OlegKoval\RegenerateUrlRewrites\Observer\CategorySaveObserver"/>
     </event>
-    <event name="catalog_product_prepare_save">
+    <event name="catalog_product_save_before">
         <observer name="olegkoval_regenerate_url_rewrites_product_umlaut"
                   instance="OlegKoval\RegenerateUrlRewrites\Observer\ProductSaveObserver"/>
     </event>
