@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.8.0] - 2026-10-27
+### Fixed
+- product url_key is no longer written for every store view: store views that show the default
+  product name now fall back to the default url_key, and redundant store-level overrides are removed
+- category url_key and url_path follow the same rule
+- products with identical names no longer get identical url_key values (previously only the URL
+  rewrite got a "-1" suffix, so saving the product in the admin failed with
+  "The value specified in the URL Key field would generate a URL that already exists");
+  the duplicate now gets "<url_key>-<sku>"
+- the generated url_key is set on the product before the URL rewrites are generated, so the
+  request path always matches the stored url_key
+
 ## [1.7.1] - 2025-05-30
 ### Changed
 - adapted for compatibility with PHP 8.4 (deprecated implicitly nullable types)
