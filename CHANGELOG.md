@@ -12,7 +12,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - products with identical names no longer get identical url_key values (previously only the URL
   rewrite got a "-1" suffix, so saving the product in the admin failed with
   "The value specified in the URL Key field would generate a URL that already exists");
-  the duplicate now gets "<url_key>-<sku>"
+  a duplicate keeps its current URL (current url_key or canonical rewrite path, e.g. "name-1");
+  only if neither is free it gets "<url_key>-<sku>"
 - the generated url_key is set on the product before the URL rewrites are generated, so the
   request path always matches the stored url_key
 

@@ -117,12 +117,25 @@ class UrlKeyScopeStorage
     }
 
     /**
-     * Return $urlKey if no other product uses it, otherwise "<url_key>-<sku>" (plus a counter if needed)
+     * Return a url_key that no other product uses.
+     *
+     * Order of preference, so that existing (indexed) URLs stay unchanged:
+     *   1. the key generated from the name
+     *   2. the product's current default-scope url_key
+     *   3. the request path of the product's current canonical URL rewrite (e.g. "name-1")
+     *   4. "<url_key>-<sku>" plus a counter if needed
      */
     public function getUniqueProductUrlKey(string $urlKey, string $sku, int $linkId, int $entityId): string
     {
-        if (!$this->isProductUrlKeyTaken($urlKey, $linkId, $entityId)) {
-            return $urlKey;
+        $candidates = [
+            $urlKey,
+            $this->getStoreValue(self::ENTITY_PRODUCT, 'url_key', $linkId, 0),
+            $this->getCurrentProductRequestKey($entityId),
+        ];
+        foreach (array_unique(array_filter($candidates, static fn(?string $key): bool => !empty($key))) as $candidate) {
+            if (!$this->isProductUrlKeyTaken($candidate, $linkId, $entityId)) {
+                return $candidate;
+            }
         }
 
         $skuSlug = $this->helper->formatUrlKey($this->helper->transliterateGermanCharacters($sku));
@@ -176,6 +189,36 @@ class UrlKeyScopeStorage
         );
 
         return $inRewrite !== false;
+    }
+
+    /**
+     * Request path of the product's canonical URL rewrite (lowest store id), without URL suffix
+     */
+    public function getCurrentProductRequestKey(int $entityId): ?string
+    {
+        $connection = $this->resourceConnection->getConnection();
+        $requestPath = $connection->fetchOne(
+            $connection->select()
+                ->from($this->resourceConnection->getTableName('url_rewrite'), ['request_path'])
+                ->where('entity_type = ?', 'product')
+                ->where('entity_id = ?', $entityId)
+                ->where('redirect_type = 0')
+                ->where('metadata IS NULL')
+                ->order('store_id ASC')
+                ->limit(1)
+        );
+        if ($requestPath === false || $requestPath === '') {
+            return null;
+        }
+
+        $requestPath = (string)$requestPath;
+        foreach ($this->getProductUrlSuffixes() as $suffix) {
+            if ($suffix !== '' && str_ends_with($requestPath, $suffix)) {
+                return substr($requestPath, 0, -strlen($suffix));
+            }
+        }
+
+        return $requestPath;
     }
 
     /**
