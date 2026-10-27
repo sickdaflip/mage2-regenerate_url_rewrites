@@ -93,6 +93,11 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
     protected $regenerateProductRewrites;
 
     /**
+     * @var UrlKeyScopeStorage
+     */
+    protected $urlKeyScopeStorage;
+
+    /**
      * @param RegenerateHelper $helper
      * @param ResourceConnection $resourceConnection
      * @param CategoryCollectionFactory $categoryCollectionFactory
@@ -101,6 +106,7 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
      * @param CategoryUrlRewriteGeneratorFactory\Proxy $categoryUrlRewriteGeneratorFactory
      * @param UrlRewriteHandlerFactory\Proxy $urlRewriteHandlerFactory
      * @param RegenerateProductRewrites $regenerateProductRewrites
+     * @param UrlKeyScopeStorage $urlKeyScopeStorage
      */
     public function __construct(
         RegenerateHelper                         $helper,
@@ -110,7 +116,8 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
         CategoryUrlPathGeneratorFactory\Proxy    $categoryUrlPathGeneratorFactory,
         CategoryUrlRewriteGeneratorFactory\Proxy $categoryUrlRewriteGeneratorFactory,
         UrlRewriteHandlerFactory\Proxy           $urlRewriteHandlerFactory,
-        RegenerateProductRewrites                $regenerateProductRewrites
+        RegenerateProductRewrites                $regenerateProductRewrites,
+        UrlKeyScopeStorage                       $urlKeyScopeStorage
     )
     {
         parent::__construct($helper, $resourceConnection);
@@ -121,6 +128,7 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
         $this->categoryUrlRewriteGeneratorFactory = $categoryUrlRewriteGeneratorFactory;
         $this->urlRewriteHandlerFactory = $urlRewriteHandlerFactory;
         $this->regenerateProductRewrites = $regenerateProductRewrites;
+        $this->urlKeyScopeStorage = $urlKeyScopeStorage;
 
         $this->dataUrlRewriteClassNames = [
             DataCategoryUrlRewriteDatabaseMap::class,
@@ -240,9 +248,30 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
         $transliteratedName = $this->helper->transliterateGermanCharacters($originalName);
         $category->setName($transliteratedName);
 
+        // A store view that shows the default name must also use the default url_key/url_path.
+        // Saving them again in the store scope only creates redundant store-level overrides.
+        $linkId = (int)$category->getData($this->urlKeyScopeStorage->getLinkField(UrlKeyScopeStorage::ENTITY_CATEGORY));
+        $useDefaultScope = false;
+        if ($storeId > 0) {
+            $defaultName = $this->urlKeyScopeStorage->getStoreValue(
+                UrlKeyScopeStorage::ENTITY_CATEGORY,
+                'name',
+                $linkId,
+                0
+            );
+            $useDefaultScope = $defaultName === null || $defaultName === (string)$originalName;
+        }
+
         // Get or generate url_key
         $generatedUrlKey = null;
-        if (!$this->regenerateOptions['noRegenUrlKey']) {
+        $defaultUrlKey = $useDefaultScope
+            ? $this->urlKeyScopeStorage->getStoreValue(UrlKeyScopeStorage::ENTITY_CATEGORY, 'url_key', $linkId, 0)
+            : null;
+        if (!$this->regenerateOptions['noRegenUrlKey'] && $defaultUrlKey !== null) {
+            $generatedUrlKey = $defaultUrlKey;
+            $category->setUrlKey($defaultUrlKey);
+            $this->urlKeyScopeStorage->removeStoreValue(UrlKeyScopeStorage::ENTITY_CATEGORY, 'url_key', $linkId, $storeId);
+        } elseif (!$this->regenerateOptions['noRegenUrlKey']) {
             $category->setOrigData('url_key', null);
             $category->setUrlKey(null);
             $generatedUrlKey = $this->_getCategoryUrlPathGenerator()->getUrlKey($category);
@@ -280,7 +309,14 @@ class RegenerateCategoryRewrites extends AbstractRegenerateRewrites
             $this->urlPathCache[$category->getId()] = $urlPath;
             $category->unsUrlPath();
             $category->setUrlPath($urlPath);
-            $category->getResource()->saveAttribute($category, 'url_path');
+            $defaultUrlPath = $useDefaultScope
+                ? $this->urlKeyScopeStorage->getStoreValue(UrlKeyScopeStorage::ENTITY_CATEGORY, 'url_path', $linkId, 0)
+                : null;
+            if ($defaultUrlPath !== null && $defaultUrlPath === $urlPath) {
+                $this->urlKeyScopeStorage->removeStoreValue(UrlKeyScopeStorage::ENTITY_CATEGORY, 'url_path', $linkId, $storeId);
+            } else {
+                $category->getResource()->saveAttribute($category, 'url_path');
+            }
         }
 
         $category->setChangedProductIds(true);

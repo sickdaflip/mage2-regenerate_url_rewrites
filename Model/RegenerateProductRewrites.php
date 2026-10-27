@@ -70,6 +70,11 @@ class RegenerateProductRewrites extends AbstractRegenerateRewrites
     protected $productCollectionFactory;
 
     /**
+     * @var UrlKeyScopeStorage
+     */
+    protected $urlKeyScopeStorage;
+
+    /**
      * RegenerateProductRewrites constructor.
      *
      * @param RegenerateHelper $helper
@@ -78,6 +83,7 @@ class RegenerateProductRewrites extends AbstractRegenerateRewrites
      * @param ProductUrlRewriteGeneratorFactory\Proxy $productUrlRewriteGeneratorFactory
      * @param ProductUrlPathGeneratorFactory\Proxy $productUrlPathGeneratorFactory
      * @param ProductCollectionFactory $productCollectionFactory
+     * @param UrlKeyScopeStorage $urlKeyScopeStorage
      */
     public function __construct(
         RegenerateHelper                        $helper,
@@ -85,7 +91,8 @@ class RegenerateProductRewrites extends AbstractRegenerateRewrites
         ProductActionFactory                    $productActionFactory,
         ProductUrlRewriteGeneratorFactory\Proxy $productUrlRewriteGeneratorFactory,
         ProductUrlPathGeneratorFactory\Proxy    $productUrlPathGeneratorFactory,
-        ProductCollectionFactory                $productCollectionFactory
+        ProductCollectionFactory                $productCollectionFactory,
+        UrlKeyScopeStorage                      $urlKeyScopeStorage
     )
     {
         parent::__construct($helper, $resourceConnection);
@@ -94,6 +101,7 @@ class RegenerateProductRewrites extends AbstractRegenerateRewrites
         $this->productUrlRewriteGeneratorFactory = $productUrlRewriteGeneratorFactory;
         $this->productUrlPathGeneratorFactory = $productUrlPathGeneratorFactory;
         $this->productCollectionFactory = $productCollectionFactory;
+        $this->urlKeyScopeStorage = $urlKeyScopeStorage;
     }
 
     /**
@@ -194,20 +202,55 @@ class RegenerateProductRewrites extends AbstractRegenerateRewrites
         // see logic in a core Product Url model: \Magento\Catalog\Model\Product\Url::getUrl()
         // if "request_path" is not null or equal to "false" then Magento do not search and do not use Url Rewrites
         $updateAttributes = ['url_path' => null];
+        $removeStoreUrlKey = false;
+        $linkId = (int)$entity->getData($this->urlKeyScopeStorage->getLinkField(UrlKeyScopeStorage::ENTITY_PRODUCT));
         if (!$this->regenerateOptions['noRegenUrlKey']) {
             // Transliterate German characters in the product name before generating URL key
-            $originalName = $entity->getName();
+            $originalName = (string)$entity->getName();
             $transliteratedName = $this->helper->transliterateGermanCharacters($originalName);
             $entity->setName($transliteratedName);
 
             $generatedKey = $this->_getProductUrlPathGenerator()->getUrlKey($entity->setUrlKey(null));
-            $updateAttributes['url_key'] = $generatedKey;
 
             // Restore original name
             $entity->setName($originalName);
+
+            $defaultName = $storeId > 0
+                ? $this->urlKeyScopeStorage->getStoreValue(UrlKeyScopeStorage::ENTITY_PRODUCT, 'name', $linkId, 0)
+                : null;
+            $defaultUrlKey = $storeId > 0
+                ? $this->urlKeyScopeStorage->getStoreValue(UrlKeyScopeStorage::ENTITY_PRODUCT, 'url_key', $linkId, 0)
+                : null;
+
+            if ($storeId > 0 && $defaultUrlKey !== null && ($defaultName === null || $defaultName === $originalName)) {
+                // The store view shows the default name, so it must use the default url_key as well.
+                // Writing it again would only create a redundant store-level override.
+                $entity->setUrlKey($defaultUrlKey);
+                $removeStoreUrlKey = true;
+            } elseif (!empty($generatedKey)) {
+                // Default scope, or a store view with its own name: identical names must not
+                // produce identical url_key values, otherwise saving the product fails later
+                $uniqueKey = $this->urlKeyScopeStorage->getUniqueProductUrlKey(
+                    (string)$generatedKey,
+                    (string)$entity->getSku(),
+                    $linkId,
+                    (int)$entity->getId()
+                );
+                $entity->setUrlKey($uniqueKey);
+                $updateAttributes['url_key'] = $uniqueKey;
+            }
         }
 
         try {
+            if ($removeStoreUrlKey) {
+                $this->urlKeyScopeStorage->removeStoreValue(
+                    UrlKeyScopeStorage::ENTITY_PRODUCT,
+                    'url_key',
+                    $linkId,
+                    $storeId
+                );
+            }
+
             $this->_getProductAction()->updateAttributes(
                 [$entity->getId()],
                 $updateAttributes,
