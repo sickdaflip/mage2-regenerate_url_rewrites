@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [1.8.1] - 2026-10-27
+### Changed
+- removed `setup_version` from module.xml: the module has no schema or data patches, so a version
+  bump no longer forces `bin/magento setup:upgrade` (the storefront refused requests until it ran)
+
 ## [1.8.0] - 2026-10-27
 ### Fixed
 - product url_key is no longer written for every store view: store views that show the default
